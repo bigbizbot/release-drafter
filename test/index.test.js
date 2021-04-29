@@ -1,13 +1,15 @@
 const nock = require('nock')
 const route = require('nock-knock/lib').default
-const { Probot, Octokit } = require('probot')
+const { Probot, ProbotOctokit } = require('probot')
 const getConfigMock = require('./helpers/config-mock')
 const releaseDrafter = require('../index')
 const mockedEnv = require('mocked-env')
+const pino = require('pino')
+const Stream = require('stream')
 
 nock.disableNetConnect()
 
-const cert = `-----BEGIN RSA PRIVATE KEY-----
+const privateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIICXQIBAAKBgQC2RTg7dNjQMwPzFwF0gXFRCcRHha4H24PeK7ey6Ij39ay1hy2o
 H9NEZOxrmAb0bEBDuECImTsJdpgI6F3OwkJGsOkIH09xTk5tC4fkfY8N7LklK+uM
 ndN4+VUXTPSj/U8lQtCd9JnnUL/wXDc46wRJ0AAKsQtUw5n4e44f+aYggwIDAQAB
@@ -28,15 +30,26 @@ describe('release-drafter', () => {
   let logger
   let restoreEnv
 
+  const streamLogsToOutput = new Stream.Writable({ objectMode: true })
+  streamLogsToOutput._write = (object, encoding, done) => {
+    logger.push(JSON.parse(object))
+    done()
+  }
+
+  probot = new Probot({
+    appId: 179208,
+    privateKey,
+    githubToken: 'test',
+    Octokit: ProbotOctokit.defaults({
+      retry: { enabled: false },
+      throttle: { enabled: false },
+    }),
+    log: pino(streamLogsToOutput),
+  })
+  probot.load(releaseDrafter)
+
   beforeEach(() => {
-    logger = jest.fn()
-    probot = new Probot({ id: 179208, cert, Octokit })
-    probot.load(releaseDrafter)
-    probot.logger.addStream({
-      level: 'trace',
-      stream: { write: logger },
-      type: 'raw',
-    })
+    logger = []
 
     nock('https://api.github.com')
       .post('/app/installations/179208/access_tokens')
@@ -69,10 +82,12 @@ describe('release-drafter', () => {
       it('does nothing', async () => {
         nock('https://api.github.com')
           .get(
-            '/repos/toolmantim/release-drafter-test-project/contents/.github/release-drafter.yml'
+            '/repos/toolmantim/release-drafter-test-project/contents/.github%2Frelease-drafter.yml'
           )
           .reply(404)
-          .get('/repos/toolmantim/.github/contents/.github/release-drafter.yml')
+          .get(
+            '/repos/toolmantim/.github/contents/.github%2Frelease-drafter.yml'
+          )
           .reply(404)
 
         await probot.receive({
@@ -129,6 +144,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -198,6 +214,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -251,6 +268,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -310,6 +328,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -368,6 +387,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -414,6 +434,7 @@ describe('release-drafter', () => {
                   "name": "v2.0.1 (Code name: Placeholder)",
                   "prerelease": false,
                   "tag_name": "v2.0.1",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -463,6 +484,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -513,6 +535,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -563,6 +586,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -609,6 +633,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -665,6 +690,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -706,6 +732,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -817,6 +844,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -873,6 +901,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -929,6 +958,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -989,6 +1019,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -1046,6 +1077,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -1097,6 +1129,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -1142,6 +1175,7 @@ describe('release-drafter', () => {
                   "name": "v2.0.1 (Code name: Placeholder)",
                   "prerelease": false,
                   "tag_name": "v2.0.1",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -1185,6 +1219,7 @@ describe('release-drafter', () => {
                   "name": "v2.1 (Code name: Placeholder)",
                   "prerelease": false,
                   "tag_name": "v2.1",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -1228,6 +1263,7 @@ describe('release-drafter', () => {
                   "name": "v3 (Code name: Placeholder)",
                   "prerelease": false,
                   "tag_name": "v3",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -1282,6 +1318,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -1337,6 +1374,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -1392,6 +1430,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -1444,6 +1483,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -1498,6 +1538,7 @@ describe('release-drafter', () => {
                     "name": "",
                     "prerelease": false,
                     "tag_name": "",
+                    "target_commitish": "",
                   }
                 `)
                 return true
@@ -1564,6 +1605,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -1619,6 +1661,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -1687,6 +1730,7 @@ describe('release-drafter', () => {
                 "name": "",
                 "prerelease": false,
                 "tag_name": "",
+                "target_commitish": "",
               }
             `)
             return true
@@ -1754,6 +1798,7 @@ describe('release-drafter', () => {
                 "name": "",
                 "prerelease": false,
                 "tag_name": "",
+                "target_commitish": "",
               }
             `)
             return true
@@ -1782,14 +1827,12 @@ describe('release-drafter', () => {
         name: 'push',
         payload,
       })
-      expect(logger).toHaveBeenCalledWith(
+      expect(logger[0]).toEqual(
         expect.objectContaining({
           msg: expect.stringContaining('Invalid config file'),
-          err: expect.objectContaining({
-            message: expect.stringContaining(
-              '"search" is required and must be a regexp or a string'
-            ),
-          }),
+          stack: expect.stringContaining(
+            '"search" is required and must be a regexp or a string'
+          ),
         })
       )
     })
@@ -1803,14 +1846,12 @@ describe('release-drafter', () => {
         name: 'push',
         payload,
       })
-      expect(logger).toHaveBeenCalledWith(
+      expect(logger[0]).toEqual(
         expect.objectContaining({
           msg: expect.stringContaining('Invalid config file'),
-          err: expect.objectContaining({
-            message: expect.stringContaining(
-              'end of the stream or a document separator is expected at line 1, column 18:'
-            ),
-          }),
+          stack: expect.stringContaining(
+            'Configuration could not be parsed from'
+          ),
         })
       )
     })
@@ -1855,6 +1896,7 @@ describe('release-drafter', () => {
                 "name": "",
                 "prerelease": false,
                 "tag_name": "",
+                "target_commitish": "",
               }
             `)
             return true
@@ -2168,6 +2210,7 @@ describe('release-drafter', () => {
                   "name": "v1.0.2 🌈",
                   "prerelease": false,
                   "tag_name": "v1.0.2",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -2223,6 +2266,7 @@ describe('release-drafter', () => {
                   "name": "v1.0.2 🌈",
                   "prerelease": false,
                   "tag_name": "v1.0.2",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -2276,6 +2320,7 @@ describe('release-drafter', () => {
                   "name": "",
                   "prerelease": false,
                   "tag_name": "",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -2327,6 +2372,7 @@ describe('release-drafter', () => {
                   "name": "v2.0.1 🌈",
                   "prerelease": false,
                   "tag_name": "v2.0.1",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -2373,6 +2419,7 @@ describe('release-drafter', () => {
                   "name": "v2.1.0",
                   "prerelease": false,
                   "tag_name": "v2.1.0",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -2416,6 +2463,7 @@ describe('release-drafter', () => {
                   "name": "v2.0.1",
                   "prerelease": false,
                   "tag_name": "v2.0.1",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -2459,6 +2507,7 @@ describe('release-drafter', () => {
                   "name": "v2.1.0",
                   "prerelease": false,
                   "tag_name": "v2.1.0",
+                  "target_commitish": "",
                 }
               `)
               return true
@@ -2502,6 +2551,54 @@ describe('release-drafter', () => {
                   "name": "v3.0.0",
                   "prerelease": false,
                   "tag_name": "v3.0.0",
+                  "target_commitish": "",
+                }
+              `)
+              return true
+            }
+          )
+          .reply(200, require('./fixtures/release'))
+
+        await probot.receive({
+          name: 'push',
+          payload: require('./fixtures/push'),
+        })
+
+        expect.assertions(1)
+      })
+    })
+
+    describe('with commitish', () => {
+      it('allows specification of a target commitish', async () => {
+        getConfigMock('config-with-commitish.yml')
+
+        nock('https://api.github.com')
+          .get(
+            '/repos/toolmantim/release-drafter-test-project/releases?per_page=100'
+          )
+          .reply(200, [require('./fixtures/release')])
+
+        nock('https://api.github.com')
+          .post('/graphql', (body) =>
+            body.query.includes('query findCommitsWithAssociatedPullRequests')
+          )
+          .reply(
+            200,
+            require('./fixtures/__generated__/graphql-commits-forking.json')
+          )
+
+        nock('https://api.github.com')
+          .post(
+            '/repos/toolmantim/release-drafter-test-project/releases',
+            (body) => {
+              expect(body).toMatchInlineSnapshot(`
+                Object {
+                  "body": "dummy",
+                  "draft": true,
+                  "name": "",
+                  "prerelease": false,
+                  "tag_name": "",
+                  "target_commitish": "staging",
                 }
               `)
               return true

@@ -1,4 +1,4 @@
-FROM node:14.14.0-alpine@sha256:11c2bffbb8ef1f7ddf601c52128ec3f1e0dac408c1ce4256f8c372be4cc6f264
+FROM node:15.11.0-alpine@sha256:1aa4d551d84797a2df6261e4b6a78b849f6bd11b0dc94b7f2ddf0023fecd8261
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
 LABEL "repository"="https://github.com/toolmantim/release-drafter"
@@ -11,4 +11,5 @@ LABEL "com.github.actions.color"="orange"
 WORKDIR /app
 COPY . .
 RUN yarn --frozen-lockfile
-ENTRYPOINT [ "/app/node_modules/.bin/probot", "receive", "/app/index.js" ]
+ENTRYPOINT [ "/app/node_modules/.bin/probot" ]
+CMD [ "receive", "/app/index.js" ]

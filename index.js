@@ -10,35 +10,155 @@ const { findCommitsWithAssociatedPullRequests } = require('./lib/commits')
 const { sortPullRequests } = require('./lib/sort-pull-requests')
 const log = require('./lib/log')
 const core = require('@actions/core')
+const { runnerIsActions } = require('./lib/utils')
+const ignore = require('ignore')
 
-module.exports = (app) => {
-  app.on('push', async (context) => {
-    const { shouldDraft, configName, version, tag, name } = getInput()
+module.exports = (app, { getRouter }) => {
+  const event = runnerIsActions() ? '*' : 'push'
+
+  if (!runnerIsActions() && typeof getRouter === 'function') {
+    getRouter().get('/healthz', (req, res) => {
+      res.status(200).json({ status: 'pass' })
+    })
+  }
+
+  app.on(
+    [
+      'pull_request.opened',
+      'pull_request.reopened',
+      'pull_request.synchronize',
+    ],
+    async (context) => {
+      const { disableAutolabeler } = getInput()
+
+      const config = await getConfig({
+        context,
+        configName: core.getInput('config-name'),
+      })
+
+      if (config === null || disableAutolabeler) return
+
+      let issue = {
+        ...context.issue({ pull_number: context.payload.pull_request.number }),
+      }
+      const changedFiles = await context.octokit.paginate(
+        context.octokit.pulls.listFiles.endpoint.merge(issue),
+        (res) => res.data.map((file) => file.filename)
+      )
+      const labels = new Set()
+
+      for (const autolabel of config['autolabeler']) {
+        let found = false
+        // check modified files
+        if (!found && autolabel.files.length > 0) {
+          const matcher = ignore().add(autolabel.files)
+          if (changedFiles.find((file) => matcher.ignores(file))) {
+            labels.add(autolabel.label)
+            found = true
+            log({
+              context,
+              message: `Found label for files: '${autolabel.label}'`,
+            })
+          }
+        }
+        // check branch names
+        if (!found && autolabel.branch.length > 0) {
+          for (const matcher of autolabel.branch) {
+            if (context.payload.pull_request.head.ref.match(matcher)) {
+              labels.add(autolabel.label)
+              found = true
+              log({
+                context,
+                message: `Found label for branch: '${autolabel.label}'`,
+              })
+              break
+            }
+          }
+        }
+        // check pr title
+        if (!found && autolabel.title.length > 0) {
+          for (const matcher of autolabel.title) {
+            if (context.payload.pull_request.title.match(matcher)) {
+              labels.add(autolabel.label)
+              found = true
+              log({
+                context,
+                message: `Found label for title: '${autolabel.label}'`,
+              })
+              break
+            }
+          }
+        }
+        // check pr body
+        if (!found && autolabel.body.length > 0) {
+          for (const matcher of autolabel.body) {
+            if (context.payload.pull_request.body.match(matcher)) {
+              labels.add(autolabel.label)
+              found = true
+              log({
+                context,
+                message: `Found label for body: '${autolabel.label}'`,
+              })
+              break
+            }
+          }
+        }
+      }
+
+      const labelsToAdd = Array.from(labels)
+      if (labelsToAdd.length > 0) {
+        let labelIssue = {
+          ...context.issue({
+            issue_number: context.payload.pull_request.number,
+            labels: labelsToAdd,
+          }),
+        }
+        await context.octokit.issues.addLabels(labelIssue)
+        if (runnerIsActions()) {
+          core.setOutput('number', context.payload.pull_request.number)
+          core.setOutput('labels', labelsToAdd.join(','))
+        }
+        return
+      }
+    }
+  )
+
+  app.on(event, async (context) => {
+    const {
+      shouldDraft,
+      configName,
+      version,
+      tag,
+      name,
+      disableReleaser,
+    } = getInput()
 
     const config = await getConfig({
-      app,
       context,
       configName,
     })
 
     const { isPreRelease } = getInput({ config })
 
-    if (config === null) return
+    if (config === null || disableReleaser) return
 
     // GitHub Actions merge payloads slightly differ, in that their ref points
     // to the PR branch instead of refs/heads/master
     const ref = process.env['GITHUB_REF'] || context.payload.ref
 
-    if (!isTriggerableReference({ ref, app, context, config })) {
+    if (!isTriggerableReference({ ref, context, config })) {
       return
     }
 
-    const { draftRelease, lastRelease } = await findReleases({ app, context })
+    const { draftRelease, lastRelease } = await findReleases({
+      ref,
+      context,
+      config,
+    })
     const {
       commits,
       pullRequests: mergedPullRequests,
     } = await findCommitsWithAssociatedPullRequests({
-      app,
       context,
       ref,
       lastRelease,
@@ -65,14 +185,14 @@ module.exports = (app) => {
 
     let createOrUpdateReleaseResponse
     if (!draftRelease) {
-      log({ app, context, message: 'Creating new release' })
+      log({ context, message: 'Creating new release' })
       createOrUpdateReleaseResponse = await createRelease({
         context,
         releaseInfo,
         config,
       })
     } else {
-      log({ app, context, message: 'Updating existing release' })
+      log({ context, message: 'Updating existing release' })
       createOrUpdateReleaseResponse = await updateRelease({
         context,
         draftRelease,
@@ -81,7 +201,9 @@ module.exports = (app) => {
       })
     }
 
-    setActionOutput(createOrUpdateReleaseResponse, releaseInfo)
+    if (runnerIsActions()) {
+      setActionOutput(createOrUpdateReleaseResponse, releaseInfo)
+    }
   })
 }
 
@@ -94,6 +216,10 @@ function getInput({ config } = {}) {
       version: core.getInput('version') || undefined,
       tag: core.getInput('tag') || undefined,
       name: core.getInput('name') || undefined,
+      disableReleaser:
+        core.getInput('disable-releaser').toLowerCase() === 'true',
+      disableAutolabeler:
+        core.getInput('disable-autolabeler').toLowerCase() === 'true',
     }
   }
 

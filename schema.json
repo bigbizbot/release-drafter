@@ -87,6 +87,10 @@
       "default": false,
       "type": "boolean"
     },
+    "filter-by-commitish": {
+      "default": false,
+      "type": "boolean"
+    },
     "replacers": {
       "default": [],
       "type": "array",
@@ -111,6 +115,49 @@
         "additionalProperties": false,
         "patterns": [],
         "required": ["search", "replace"]
+      }
+    },
+    "autolabeler": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "files": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "branch": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "body": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "patterns": [],
+        "required": ["label"]
       }
     },
     "categories": {
@@ -200,6 +247,18 @@
       },
       "additionalProperties": false,
       "patterns": []
+    },
+    "category-template": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [""]
+        },
+        {
+          "default": "## $TITLE",
+          "type": "string"
+        }
+      ]
     },
     "template": {
       "type": "string"

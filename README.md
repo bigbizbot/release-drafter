@@ -17,17 +17,27 @@ on:
   push:
     # branches to consider in the event; optional, defaults to all
     branches:
-      - $default-branch
+      - master
+  # pull_request event is required only for autolabeler
+  pull_request:
+    # Only following types are handled by the action, but one can default to all as well
+    types: [opened, reopened, synchronize]
 
 jobs:
   update_release_draft:
     runs-on: ubuntu-latest
     steps:
+      # (Optional) GitHub Enterprise requires GHE_HOST variable set
+      #- name: Set GHE_HOST
+      #  run: |
+      #    echo "GHE_HOST=${GITHUB_SERVER_URL##https:\/\/}" >> $GITHUB_ENV
+
       # Drafts your next Release notes as Pull Requests are merged into "master"
       - uses: release-drafter/release-drafter@v5
-        with:
-          # (Optional) specify config name to use, relative to .github/. Default: release-drafter.yml
-          # config-name: my-config.yml
+        # (Optional) specify config name to use, relative to .github/. Default: release-drafter.yml
+        # with:
+        #   config-name: my-config.yml
+        #   disable-autolabeler: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -96,6 +106,7 @@ You can configure Release Drafter using the following key in your `.github/relea
 | Key                    | Required | Description                                                                                                                                                                |
 | ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `template`             | Required | The template for the body of the draft release. Use [template variables](#template-variables) to insert values.                                                            |
+| `category-template`    | Optional | The template to use for each category. Use [category template variables](#category-template-variables) to insert values. Default: `"## $TITLE"`.                           |
 | `name-template`        | Optional | The template for the name of the draft release. For example: `"v$NEXT_PATCH_VERSION"`.                                                                                     |
 | `tag-template`         | Optional | The template for the tag of the draft release. For example: `"v$NEXT_PATCH_VERSION"`.                                                                                      |
 | `version-template`     | Optional | The template to use when calculating the next version number for the release. Useful for projects that don't use semantic versioning. Default: `"$MAJOR.$MINOR.$PATCH"`    |
@@ -111,6 +122,8 @@ You can configure Release Drafter using the following key in your `.github/relea
 | `sort-direction`       | Optional | Sort changelog in ascending or descending order. Can be one of: `ascending`, `descending`. Default: `descending`.                                                          |
 | `prerelease`           | Optional | Mark the draft release as pre-release. Default `false`.                                                                                                                    |
 | `version-resolver`     | Optional | Adjust the `$RESOLVED_VERSION` variable using labels. Refer to [Version Resolver](#version-resolver) to learn more about this                                              |
+| `filter-by-commitish`  | Optional | Filter previous releases to consider only the target branch of the release. Default: `false`.                                                                              |
+| `commitish`            | Optional | Specify the target branch of the release. Default: the default branch of the repo.                                                                                         |
 
 Release Drafter also supports [Probot Config](https://github.com/probot/probot-config), if you want to store your configuration files in a central repository. This allows you to share configurations between projects, and create a organization-wide configuration file by creating a repository named `.github` with the file `.github/release-drafter.yml`.
 
@@ -124,6 +137,14 @@ You can use any of the following variables in your `template`:
 | `$CONTRIBUTORS` | A comma separated list of contributors to this release (pull request authors, commit authors, and commit committers). |
 | `$PREVIOUS_TAG` | The previous releases’s tag.                                                                                          |
 
+## Category Template Variables
+
+You can use any of the following variables in `category-template`:
+
+| Variable | Description                          |
+| -------- | ------------------------------------ |
+| `$TITLE` | The category title, e.g. `Features`. |
+
 ## Next Version Variables
 
 You can use any of the following variables in your `template`, `name-template` and `tag-template`:
@@ -133,7 +154,7 @@ You can use any of the following variables in your `template`, `name-template` a
 | `$NEXT_PATCH_VERSION` | The next patch version number. For example, if the last tag or release was `v1.2.3`, the value would be `v1.2.4`. This is the most commonly used value. |
 | `$NEXT_MINOR_VERSION` | The next minor version number. For example, if the last tag or release was `v1.2.3`, the value would be `v1.3.0`.                                       |
 | `$NEXT_MAJOR_VERSION` | The next major version number. For example, if the last tag or release was `v1.2.3`, the value would be `v2.0.0`.                                       |
-| `$RESOLVED_VERSION`   | The next resolved version number, based on GitHub labels. Refer to [Version Resolution](#version-resolution) to learn more about this.                  |
+| `$RESOLVED_VERSION`   | The next resolved version number, based on GitHub labels. Refer to [Version Resolver](#version-resolver) to learn more about this.                      |
 
 ## Version Template Variables
 
@@ -213,7 +234,8 @@ Pull requests with the label "feature" or "fix" will now be grouped together:
 
 <img src="design/screenshot-2.png" alt="Screenshot of generated draft release with categories" width="586" />
 
-Adding such labels to your PRs can be automated by using [PR Labeler](https://github.com/TimonVS/pr-labeler-action) or [Probot Auto Labeler](https://github.com/probot/autolabeler).
+Adding such labels to your PRs can be automated by using the embedded Autolabeler functionality (see below),
+[PR Labeler](https://github.com/TimonVS/pr-labeler-action) or [Probot Auto Labeler](https://github.com/probot/autolabeler).
 
 ## Exclude Pull Requests
 
@@ -249,6 +271,30 @@ replacers:
     replace: 'My Name'
 ```
 
+## Autolabeler
+
+You can add automatically a label into a pull request, with the `autolabeler` option. Available matchers are `files` (glob), `branch` (regex), `title` (regex) and `body` (regex).
+Matchers are evaluated independently; the label will be set if at least one of the matchers meets the criteria.
+
+```yml
+autolabeler:
+  - label: 'chore'
+    files:
+      - '*.md'
+    branch:
+      - '/docs{0,1}\/.+/'
+  - label: 'bug'
+    branch:
+      - '/fix\/.+/'
+    title:
+      - '/fix/i'
+  - label: 'enhancement'
+    branch:
+      - '/feature\/.+/'
+    body:
+      - '/JIRA-[0-9]{1,4}/'
+```
+
 ## Projects that don't use Semantic Versioning
 
 If your project doesn't follow [Semantic Versioning](https://semver.org) you can still use Release Drafter, but you may want to set the `version-template` option to customize how the `$NEXT_{PATCH,MINOR,MAJOR}_VERSION` environment variables are generated.
@@ -267,6 +313,7 @@ The Release Drafter GitHub Action accepts a number of optional inputs directly i
 | `version`     | The version to be associated with the GitHub release that's created or updated. This will override any version calculated by the release-drafter.                                                                                                                                                                                                                  |
 | `publish`     | A boolean indicating whether the release being created or updated should be immediately published. This may be useful if the output of a previous workflow step determines that a new version of your project has been (or will be) released, as with [`salsify/action-detect-and-tag-new-version`](https://github.com/salsify/action-detect-and-tag-new-version). |
 | `prerelease`  | A boolean indicating whether the relase being created or updated is a prerelease.                                                                                                                                                                                                                                                                                  |
+| `commitish`   | A string specifying the target branch for the release being created.                                                                                                                                                                                                                                                                                               |
 
 ## Action Outputs
 
